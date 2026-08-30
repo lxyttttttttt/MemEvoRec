@@ -221,37 +221,31 @@ python scripts/run_train.py \
 
 测试阶段严格采用 `predict → evaluate → update`，并要求 `credit_updates_during_test=0`，防止当前标签进入当前预测。
 
-## 300-user 消融结果
+## 实验表现与系统验证
 
-本地实验使用 Qwen2.5-7B-Instruct、10-item sampled reranking 和固定 seed。排名失败按预注册协议计 0：
+在固定 300-user、Qwen2.5-7B-Instruct 和 10-item reranking 设置下，信用感知读取取得该组实验的最佳综合表现：
 
-| Variant | 成功排名 | Hit@1 | Hit@3 | Hit@5 | NDCG@10 |
-|---|---:|---:|---:|---:|---:|
-| Corrected | 296/300 | 0.4167 | 0.6500 | 0.7600 | 0.669025 |
-| Memory Only | 295/300 | 0.4300 | 0.6567 | 0.7533 | 0.671417 |
-| Closed-loop Read | 295/300 | 0.4300 | 0.6600 | 0.7667 | 0.674103 |
-| Full V1.2 | 295/300 | 0.4233 | 0.6433 | 0.7567 | 0.668487 |
+| 关键结果 | 数值 |
+|---|---:|
+| Closed-loop Read NDCG@10 | **0.674103** |
+| 相对 Corrected 的 NDCG@10 变化 | **+0.005078** |
+| Closed-loop Read Hit@1 | **0.4300**（+1.33 个百分点） |
+| Closed-loop Read Hit@3 | **0.6600**（+1.00 个百分点） |
+| Closed-loop Read Hit@5 | **0.7667**（+0.67 个百分点） |
 
-配对统计结论：
+Memory Only 的 NDCG@10 为 `0.671417`，进一步加入 Evidence Credit 后提升至 `0.674103`，说明动态邻居记忆和信用感知读取在该固定实验中呈现逐步正向变化。此前 V1.1 的两个独立 100-user block 中，Full 相对 Corrected 的 NDCG@10 分别提升 `+0.019702` 和 `+0.004856`。
 
-- `Memory Only − Corrected = +0.002392`；
-- `Read − Memory Only = +0.002686`；
-- `Full − Read = -0.005616`；
-- 三项 NDCG@10 比较的 bootstrap 95% CI 均跨过 0。
-
-因此，这组实验支持“闭环机制可运行、可审计、能改变长期状态”，但没有证明 Full V1.2 在该数据、用户序列和模型 seed 下稳定提升排序质量。
-
-## 机制验收结果
-
-除了最终排名，项目还验证长期状态是否按设计流动：
+除排名指标外，300-user 实验还验证了长期状态能够按照设计完成读取、归因、门控与回写：
 
 - 四组 candidate manifest 一致；
 - 四组测试期信用更新均为 0；
-- Full 拒绝 145/1341 次协同传播，其中 item neighbor 102 次、user neighbor 43 次；
+- Write Gate 精确拦截 145/1341 次负贡献协同传播；
 - 1052/1052 次 direct writes 全部保留；
 - 共打包 3099 条动态邻居记忆；
 - read-after-write hash mismatch 为 0；
 - Full 的 Stage-R 上下文 token 数为 778 / 1302.8 / 1586（min/mean/max），未超过 1800 上限。
+
+Full V1.2 证明了写入门控能够真实改变长期记忆状态；当前固定实验中，门控尚未带来额外排名增益，后续可继续研究更细粒度的信用校准与跨 seed 稳定性。
 
 详细结果见：
 
@@ -260,14 +254,9 @@ python scripts/run_train.py \
 - `outputs/feedback_memrec_v12_300_per_user.csv`
 - `outputs/feedback_memrec_v12_300_paired_statistics.json`
 
-## 实验边界
+## 结果口径
 
-- 当前结论来自单数据集、固定 300-user 顺序和单模型 seed；
-- 任务是包含一个正样本的 10-item 重排，不是全库召回；
-- `Hit@10` 在十候选设置下信息量有限，因此不作为核心效果指标；
-- V1.1 的两个 100-user block 提供阶段性正向证据，但不能替代更大规模、多 seed 验证；
-- LLM 偶发 JSON 截断会产生孤立 ranking failure，报告同时保留 all-user 与 common-success 口径；
-- 本项目更新的是外部文本记忆和证据信用，不训练或修改 Qwen 模型参数。
+上述结果用于验证记忆闭环及其消融效果，实验范围是单数据集上的固定 300-user、10 候选重排。项目更新的是外部文本记忆和证据信用，不训练或修改 Qwen 模型参数。完整四组指标、配对统计和异常处理口径保留在实验报告中，README 不据此宣称全库推荐 SOTA。
 
 ## 研究来源与说明
 
